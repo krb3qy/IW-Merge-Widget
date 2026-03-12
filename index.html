@@ -1052,10 +1052,15 @@ function detectConference() {
     return;
   }
 
-  // Auto-detect: if there's exactly one conference-like call, offer the panel
-  const conferences = calls.filter(c => c.isConference);
-  if (conferences.length === 1) {
-    showAddParticipantPanel(conferences[0].id, conferences[0].displayLabel);
+  // Auto-detect: if there's any active call, offer the panel.
+  // After a merge the conference is just a single conversation — no need
+  // to gate on isConference; any connected call can have participants added.
+  if (calls.length >= 1) {
+    // Prefer a conference-like call, otherwise use the first active call
+    const target = calls.find(c => c.isConference) || calls[0];
+    showAddParticipantPanel(target.id, target.displayLabel);
+  } else {
+    hideAddParticipantPanel();
   }
 }
 
