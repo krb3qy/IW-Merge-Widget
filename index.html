@@ -350,19 +350,6 @@
             </div>
           </div>
 
-          <!-- Debug log — visible in the app -->
-          <div class="col-12">
-            <div class="card glass mt-2">
-              <div class="card-body" style="padding:8px 12px;">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                  <h6 class="mb-0" style="font-size:12px; color:var(--uva-navy);">Debug Log</h6>
-                  <button id="copyDebugBtn" class="btn btn-sm btn-outline-light" style="padding:2px 8px; font-size:11px;">Copy Log</button>
-                  <button id="clearDebugBtn" class="btn btn-sm btn-outline-light" style="padding:2px 8px; font-size:11px;">Clear</button>
-                </div>
-                <div id="debugLog" style="font-family:monospace; font-size:11px; color:var(--muted); max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-all;"></div>
-              </div>
-            </div>
-          </div>
 
         </div>
       </div>
@@ -452,135 +439,6 @@ let bannerTimeout = null;
 
 // Track the active conference after merge
 let activeConferenceId = null;
-
-// ================================================================
-//  Remote logging — pushes to GitHub private repo
-// ================================================================
-const LOG_CONFIG = {
-  // Token is passed via URL hash: #logtoken=xxx (never sent to server, stays client-side)
-  token: null,
-  repo: "krb3qy/IW-Merge-Logs",
-  file: "debug.log",
-  flushInterval: 8000  // push logs every 8 seconds
-};
-
-let logBuffer = [];
-let logFileSha = null;
-let logFlushTimer = null;
-let logFlushing = false;
-
-async function flushLogsToGithub() {
-  if (!LOG_CONFIG.token || logFlushing || logBuffer.length === 0) return;
-  logFlushing = true;
-
-  const batch = logBuffer.splice(0);
-  const newContent = batch.join("\n") + "\n";
-
-  try {
-    // Get current file to get SHA
-    const getResp = await fetch(
-      `https://api.github.com/repos/${LOG_CONFIG.repo}/contents/${LOG_CONFIG.file}`,
-      { headers: { "Authorization": `Bearer ${LOG_CONFIG.token}`, "Accept": "application/vnd.github+json" } }
-    );
-
-    let existing = "";
-    if (getResp.ok) {
-      const data = await getResp.json();
-      logFileSha = data.sha;
-      existing = atob(data.content.replace(/\n/g, ""));
-    }
-
-    // Append new logs — keep last 500 lines max to avoid bloat
-    const combined = existing + newContent;
-    const lines = combined.split("\n");
-    const trimmed = lines.slice(-500).join("\n");
-
-    const encoded = btoa(unescape(encodeURIComponent(trimmed)));
-
-    const putBody = {
-      message: `log ${new Date().toISOString()}`,
-      content: encoded
-    };
-    if (logFileSha) putBody.sha = logFileSha;
-
-    const putResp = await fetch(
-      `https://api.github.com/repos/${LOG_CONFIG.repo}/contents/${LOG_CONFIG.file}`,
-      {
-        method: "PUT",
-        headers: {
-          "Authorization": `Bearer ${LOG_CONFIG.token}`,
-          "Accept": "application/vnd.github+json",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(putBody)
-      }
-    );
-
-    if (putResp.ok) {
-      const result = await putResp.json();
-      logFileSha = result.content.sha;
-    } else {
-      console.warn("[IW-Merge] Log push failed:", putResp.status, await putResp.text());
-    }
-  } catch (e) {
-    console.warn("[IW-Merge] Log push error:", e.message);
-    // Put failed batch back
-    logBuffer.unshift(...batch);
-  } finally {
-    logFlushing = false;
-  }
-}
-
-function initLogToken() {
-  const params = new URLSearchParams(window.location.search);
-
-  // ?log=1 on the URL or persisted from before OAuth redirect
-  if (params.get("log") === "1") {
-    sessionStorage.setItem("iw-merge-log", "1");
-  }
-
-  if (sessionStorage.getItem("iw-merge-log") === "1") {
-    const p = ["github_pat_11B7CELT","Y02p1RXNZC0ji0_l9","tGjuDibzke2lS46AXX","lZSRPBAd1ZHVXsGR7T","pt9qTPGCNCCF3moFKgcwQ"];
-    LOG_CONFIG.token = p.join("");
-    return true;
-  }
-
-  const fromQuery = params.get("logtoken");
-  if (fromQuery) {
-    LOG_CONFIG.token = fromQuery;
-    return true;
-  }
-  const hash = window.location.hash || "";
-  const match = hash.match(/logtoken=([^&]+)/);
-  if (match) {
-    LOG_CONFIG.token = decodeURIComponent(match[1]);
-    return true;
-  }
-  return false;
-}
-
-function startLogFlusher() {
-  if (logFlushTimer) return;
-  if (!LOG_CONFIG.token) return; // no token, no remote logging
-  logFlushTimer = setInterval(flushLogsToGithub, LOG_CONFIG.flushInterval);
-}
-
-// In-app debug logger — visible in UI, console, AND pushed to GitHub
-function debugLog(msg) {
-  const ts = new Date().toISOString();
-  const line = `[${ts}] ${msg}`;
-  console.log("[IW-Merge]", msg);
-
-  // UI panel
-  const logEl = el("debugLog");
-  if (logEl) {
-    logEl.textContent += line + "\n";
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  // Buffer for GitHub push
-  logBuffer.push(line);
-}
 
 function setStatus(text) { el("status").textContent = text; }
 function setAuthHint(text) { el("authHint").textContent = text || ""; }
@@ -1071,14 +929,10 @@ function syncRightPanel() {
 // ================================================================
 
 function showAddParticipantPanel(conversationId, label) {
-  debugLog("showAddParticipantPanel: id=" + conversationId + " label=" + label);
   activeConferenceId = conversationId;
   const panel = el("addParticipantPanel");
-  if (!panel) { debugLog("ERROR: addParticipantPanel element NOT FOUND"); return; }
+  if (!panel) return;
   panel.classList.add("active");
-  const display = window.getComputedStyle(panel).display;
-  const height = panel.offsetHeight;
-  debugLog("Panel display=" + display + " height=" + height + "px classes=" + panel.classList.toString());
   el("conferenceLabel").textContent = label || "Conference";
   el("conferenceId").textContent = conversationId;
   el("addParticipantAddr").value = "";
@@ -1087,7 +941,6 @@ function showAddParticipantPanel(conversationId, label) {
 }
 
 function hideAddParticipantPanel() {
-  debugLog("hideAddParticipantPanel called");
   activeConferenceId = null;
   el("addParticipantPanel").classList.remove("active");
 }
@@ -1172,29 +1025,20 @@ async function addParticipant() {
 //  Also detect new conferences even if the user didn't just merge.
 // ================================================================
 function detectConference() {
-  debugLog("detectConference: activeConferenceId=" + activeConferenceId + " calls=" + calls.length);
-  calls.forEach(function(c) {
-    debugLog("  call: id=" + c.id.slice(0,8) + " state=" + c.state + " isConf=" + c.isConference + " label=" + c.displayLabel);
-  });
-
   if (activeConferenceId) {
     const still = calls.find(c => c.id === activeConferenceId);
     if (still) {
-      debugLog("Active conference still exists, keeping panel");
       el("conferenceLabel").textContent = still.displayLabel || "Conference";
       return;
     }
-    debugLog("Active conference gone, hiding panel");
     hideAddParticipantPanel();
     return;
   }
 
   if (calls.length >= 1) {
     const target = calls.find(c => c.isConference) || calls[0];
-    debugLog("Auto-showing panel for: " + target.id.slice(0,8) + " " + target.displayLabel);
     showAddParticipantPanel(target.id, target.displayLabel);
   } else {
-    debugLog("No active calls, hiding panel");
     hideAddParticipantPanel();
   }
 }
@@ -1239,10 +1083,8 @@ function installResizeWatcher() {
 async function loadConversations() {
   setStatus("Loading\u2026");
   try {
-    debugLog("loadConversations: fetching /api/v2/conversations");
     const payload = await apiFetch("/api/v2/conversations");
     calls = parseCallsFromConversations(payload);
-    debugLog("loadConversations: parsed " + calls.length + " active calls from " + (payload.entities || []).length + " entities");
 
     const valid = new Set(calls.map(c => c.id));
     selectedIds = new Set(Array.from(selectedIds).filter(id => valid.has(id)));
@@ -1287,14 +1129,11 @@ async function mergeSelected() {
     try {
       mergeEndpoint = `/api/v2/conversations/calls/${target}/conference`;
       await apiFetch(mergeEndpoint, { method: "PATCH", body });
-      debugLog("Conference PATCH succeeded: " + mergeEndpoint);
     } catch (e1) {
       firstError = e1;
-      debugLog("Conference PATCH failed: " + e1.message + " — trying fallback");
       // Fallback to the generic calls endpoint
       mergeEndpoint = `/api/v2/conversations/calls/${target}`;
       await apiFetch(mergeEndpoint, { method: "PATCH", body });
-      debugLog("Fallback PATCH succeeded: " + mergeEndpoint);
     }
 
     el("actionResult").innerHTML = `
@@ -1309,10 +1148,8 @@ async function mergeSelected() {
     const targetCall = calls.find(c => c.id === target);
     showAddParticipantPanel(target, targetCall?.displayLabel || "Conference");
 
-    flushLogsToGithub(); // push merge logs immediately
     setTimeout(loadConversations, 2000);
   } catch (e) {
-    debugLog("ERROR: Both merge endpoints failed: " + (e.message || e));
     el("actionResult").innerHTML = `
       <div class="alert alert-danger mb-0">
         <div class="fw-semibold">Merge failed</div>
@@ -1345,24 +1182,6 @@ async function init() {
   });
 
   el("mergeBtn").addEventListener("click", mergeSelected);
-
-  // Debug clear button
-  el("copyDebugBtn")?.addEventListener("click", () => {
-    const text = el("debugLog").textContent;
-    navigator.clipboard.writeText(text).then(() => {
-      el("copyDebugBtn").textContent = "Copied!";
-      setTimeout(() => { el("copyDebugBtn").textContent = "Copy Log"; }, 1500);
-    });
-  });
-  el("clearDebugBtn")?.addEventListener("click", () => { el("debugLog").textContent = ""; });
-
-  debugLog("init: app started, security gate passed");
-  if (initLogToken()) {
-    startLogFlusher();
-    debugLog("init: remote logging ACTIVE (every " + LOG_CONFIG.flushInterval + "ms)");
-  } else {
-    debugLog("init: remote logging OFF (no #logtoken in URL)");
-  }
 
   el("logoutBtn").addEventListener("click", () => {
     clearAuth();
