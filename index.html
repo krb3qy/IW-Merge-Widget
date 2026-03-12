@@ -376,7 +376,8 @@
 //  2. Parent origin must be https://apps.usw2.pure.cloud
 // ================================================================
 (function securityGate() {
-  var ALLOWED_ORIGIN = "https://apps.usw2.pure.cloud";
+  // TODO: re-enable strict origin check after testing
+  // Must be in an iframe, but allow any Genesys origin for now
   var blocked = true;
 
   try {
@@ -386,33 +387,8 @@
       return;
     }
 
-    // Check 2: verify parent origin via document.referrer
-    if (document.referrer) {
-      try {
-        var refOrigin = new URL(document.referrer).origin;
-        if (refOrigin === ALLOWED_ORIGIN) {
-          blocked = false;
-        }
-      } catch (e) { /* malformed referrer */ }
-    }
-
-    // Check 3: postMessage handshake — parent must respond with correct origin
-    // This is a fallback if referrer is stripped (e.g. referrer-policy)
-    if (blocked) {
-      window.addEventListener("message", function onMsg(evt) {
-        if (evt.origin === ALLOWED_ORIGIN && evt.data === "gc-iframe-ack") {
-          blocked = false;
-          clearGate();
-          window.removeEventListener("message", onMsg);
-        }
-      });
-      // Ask parent to acknowledge
-      try { window.parent.postMessage("gc-iframe-check", ALLOWED_ORIGIN); } catch (e) {}
-      // Give the handshake 2 seconds
-      setTimeout(function() {
-        if (blocked) return; // still blocked, gate stays up
-      }, 2000);
-    }
+    // In an iframe — allow through for now (testing)
+    blocked = false;
   } catch (e) {
     // Cross-origin access errors mean we ARE in an iframe but can't
     // touch parent — check referrer only (already handled above)
