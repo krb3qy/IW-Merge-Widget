@@ -539,8 +539,13 @@ async function flushLogsToGithub() {
 }
 
 function initLogToken() {
-  // Read token from URL hash: #logtoken=ghp_xxx
-  // Hash fragment is never sent to the server — stays in browser only
+  // Read token from query param (?logtoken=xxx) or hash (#logtoken=xxx)
+  const params = new URLSearchParams(window.location.search);
+  const fromQuery = params.get("logtoken");
+  if (fromQuery) {
+    LOG_CONFIG.token = fromQuery;
+    return true;
+  }
   const hash = window.location.hash || "";
   const match = hash.match(/logtoken=([^&]+)/);
   if (match) {
