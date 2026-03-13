@@ -52,22 +52,35 @@
     /* ── Header ──────────────────────────────────── */
     .header {
       background: white;
-      padding: 12px 20px;
+      padding: 10px 16px;
       display: flex;
       align-items: center;
-      gap: 12px;
+      flex-wrap: wrap;
+      gap: 8px 12px;
       border-bottom: 1.5px solid var(--gray-200);
     }
-    .header svg { height: 32px; width: auto; flex-shrink: 0; }
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .header-brand svg {
+      height: 32px; width: auto; flex-shrink: 0;
+      transition: height 0.2s;
+    }
     .header h1 {
       color: var(--uva-navy); font-size: 16px; font-weight: 600;
       letter-spacing: 0.5px; margin: 0; white-space: nowrap;
+      transition: font-size 0.2s;
     }
     .header .header-right {
       margin-left: auto;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
     .header .status-dot {
       width: 8px; height: 8px; border-radius: 50%;
@@ -75,6 +88,21 @@
     }
     .header .status-dot.connected { background: var(--green); animation: pulse 1.5s infinite; }
     .header .status-text { font-size: 12px; color: var(--gray-600); white-space: nowrap; }
+
+    /* Responsive header */
+    @media (max-width: 500px) {
+      .header { padding: 8px 12px; gap: 6px 8px; }
+      .header-brand svg { height: 22px; }
+      .header h1 { font-size: 13px; }
+      .header .status-text { display: none; }
+      .header .btn-sm { padding: 4px 8px; font-size: 11px; }
+    }
+    @media (max-width: 380px) {
+      .header-brand svg { height: 18px; }
+      .header h1 { font-size: 12px; }
+      .header .header-right { gap: 4px; }
+      .header .btn-sm { padding: 3px 6px; font-size: 10px; border-radius: 6px; }
+    }
 
     @keyframes pulse {
       0%, 100% { opacity: 1; }
@@ -88,6 +116,15 @@
       max-width: 520px;
       width: 100%;
       margin: 0 auto;
+    }
+    @media (max-width: 500px) {
+      .main { padding: 12px; }
+      .section { padding: 12px; }
+      .section-label { font-size: 10px; }
+      .call-ani { font-size: 13px; }
+      .call-meta { font-size: 11px; }
+      .btn-full { padding: 10px; font-size: 14px; }
+      .phone-row input { font-size: 14px; padding: 8px 10px; }
     }
 
     /* ── Card ─────────────────────────────────────── */
@@ -369,6 +406,7 @@
 
     <!-- Header -->
     <header class="header">
+      <div class="header-brand">
       <svg role="img" height="32" viewBox="0 0 582 87" xmlns="http://www.w3.org/2000/svg" aria-label="UVA Health">
         <g transform="translate(0,-1)">
           <g fill="#E57200">
@@ -402,6 +440,7 @@
         </g>
       </svg>
       <h1>Merge Calls</h1>
+      </div>
       <div class="header-right">
         <span id="statusDot" class="status-dot"></span>
         <span id="statusText" class="status-text">Initializing&hellip;</span>
