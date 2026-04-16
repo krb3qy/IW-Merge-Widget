@@ -484,7 +484,7 @@
       <div class="header-right">
         <span id="statusDot" class="status-dot"></span>
         <span id="statusText" class="status-text">Initializing&hellip;</span>
-        <button id="popoutBtn" class="btn btn-ghost btn-sm">Pop Out</button>
+        <a id="popoutBtn" class="btn btn-ghost btn-sm" target="_blank" rel="noopener" style="cursor:pointer;text-decoration:none">Pop Out</a>
         <button id="refreshBtn" class="btn btn-ghost btn-sm">Refresh</button>
         <button id="logoutBtn" class="btn btn-danger btn-sm">Logout</button>
       </div>
@@ -1606,58 +1606,65 @@ function hidePopoutPlaceholder() {
   startAutoRefresh();
 }
 
-function openPopout() {
-  if (popoutWindow && !popoutWindow.closed) { popoutWindow.focus(); return; }
+function buildPopoutUrl() {
+  const popUrl = new URL(window.location.href);
+  popUrl.searchParams.set("mode", "popout");
+  popUrl.searchParams.delete("code");
+  popUrl.searchParams.delete("state");
+  return popUrl.toString();
+}
+
+function preparePopoutHref() {
+  const tok = sessionStorage.getItem(STORAGE.token);
+  const exp = sessionStorage.getItem(STORAGE.tokenExpiresAt);
+  if (tok) localStorage.setItem("gc_popout_token", tok);
+  if (exp) localStorage.setItem("gc_popout_token_expires", exp);
+
+  const btn = el("popoutBtn");
+  if (btn) btn.href = buildPopoutUrl();
+}
+
+function openPopout(e) {
+  if (popoutWindow && !popoutWindow.closed) {
+    e.preventDefault();
+    popoutWindow.focus();
+    return;
+  }
 
   const tok = sessionStorage.getItem(STORAGE.token);
   const exp = sessionStorage.getItem(STORAGE.tokenExpiresAt);
   if (tok) localStorage.setItem("gc_popout_token", tok);
   if (exp) localStorage.setItem("gc_popout_token_expires", exp);
 
-  const popUrl = new URL(window.location.href);
-  popUrl.searchParams.set("mode", "popout");
-  popUrl.searchParams.delete("code");
-  popUrl.searchParams.delete("state");
+  const url = buildPopoutUrl();
 
+  // Try sized popup first — works in Chrome and non-restricted environments
   popoutWindow = window.open(
-    popUrl.toString(), "merger_widget_popup",
+    url, "merger_widget_popup",
     "width=580,height=850,menubar=no,toolbar=no,status=no,resizable=yes,scrollbars=yes"
   );
 
-  if (!popoutWindow) {
-    // Fallback: synthesized anchor-target-blank click — survives iframe popup
-    // blocks that kill scripted window.open() (notably Edge in GC iframe).
-    // Tradeoff: opens as a full tab, not a sized window, and we lose the
-    // window handle so close-detection relies on BroadcastChannel only.
-    const a = document.createElement("a");
-    a.href = popUrl.toString();
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+  if (popoutWindow) {
+    // Sized popup opened — prevent the anchor's native navigation
+    e.preventDefault();
 
-    localStorage.setItem(POPOUT_KEY, "true");
-    if (broadcastChannel) broadcastChannel.postMessage("popout-opened");
-    showPopoutPlaceholder();
-    return;
+    popoutPollTimer = setInterval(() => {
+      if (popoutWindow && popoutWindow.closed) {
+        clearInterval(popoutPollTimer);
+        popoutPollTimer = null;
+        popoutWindow = null;
+        localStorage.removeItem(POPOUT_KEY);
+        if (broadcastChannel) broadcastChannel.postMessage("popout-closed");
+        hidePopoutPlaceholder();
+      }
+    }, 500);
   }
+  // If window.open returned null, do NOT preventDefault — let the anchor's
+  // native target="_blank" navigation carry the click through to a new tab.
 
   localStorage.setItem(POPOUT_KEY, "true");
   if (broadcastChannel) broadcastChannel.postMessage("popout-opened");
   showPopoutPlaceholder();
-
-  popoutPollTimer = setInterval(() => {
-    if (popoutWindow && popoutWindow.closed) {
-      clearInterval(popoutPollTimer);
-      popoutPollTimer = null;
-      popoutWindow = null;
-      localStorage.removeItem(POPOUT_KEY);
-      if (broadcastChannel) broadcastChannel.postMessage("popout-closed");
-      hidePopoutPlaceholder();
-    }
-  }, 500);
 }
 
 function setupPopoutMode() {
@@ -1707,6 +1714,7 @@ async function init() {
 
   const popoutBtn = el("popoutBtn");
   if (popoutBtn && !isPopoutMode()) {
+    popoutBtn.addEventListener("mousedown", preparePopoutHref);
     popoutBtn.addEventListener("click", openPopout);
   }
 
